@@ -1,32 +1,56 @@
 body {
+  font-family: 'Arial', sans-serif;
   margin: 0;
   padding: 0;
-  height: 100vh;
+  background-color: #32bea6;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   align-items: center;
-  background-color: #32bea6; 
-  font-family: 'Arial', sans-serif;
 }
 
-.card {
-  background: white;
-  padding: 20px 40px;
-  border-radius: 8px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-  width: 300px; 
+.container {
+  width: 80%;
+  max-width: 1200px;
+  margin-top: 20px; /* Only top margin to push container down from the header */
+}
+
+.header {
+  background-color: #009688;
+  color: white;
+  padding: 10px 0;
+  width: 100%;
   text-align: center;
 }
 
-input[type="email"],
-input[type="text"], 
-input[type="password"] {
+.subscription-area, .query-area {
+  background-color: #4db6ac;
+  padding: 20px;
+  margin: 10px 0;
+  border-radius: 8px;
+}
+
+.subscriptions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr); /* Three columns by default */
+  gap: 20px; /* Space between grid items */
+  padding: 10px;
+}
+
+.subscription-item {
+  background-color: white;
+  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+input[type="email"], input[type="text"], input[type="password"] {
   width: 100%;
   padding: 10px;
   margin: 10px 0;
   border: 1px solid #ccc;
   border-radius: 5px;
-  box-sizing: border-box; 
+  box-sizing: border-box;
 }
 
 button {
@@ -35,20 +59,20 @@ button {
   margin-top: 10px;
   border: none;
   border-radius: 5px;
-  background-color: #654ea3; 
+  background-color: #654ea3;
   color: white;
   font-size: 1rem;
   cursor: pointer;
 }
 
 button:hover {
-  background-color: #543c9c; 
+  background-color: #543c9c;
 }
 
 a {
   display: block;
   margin-top: 20px;
-  color: #654ea3; 
+  color: #654ea3;
   text-decoration: none;
   font-size: 1rem;
 }
@@ -62,13 +86,19 @@ a:hover {
   margin-top: 10px;
 }
 
-body {
-  margin: 0;
-  padding: 0;
-  height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background-color: #32bea6; 
-  font-family: 'Arial', sans-serif;
+/* Responsive adjustments for tablet screens */
+@media (max-width: 1024px) {
+  .subscriptions {
+    grid-template-columns: repeat(2, 1fr); /* Two columns on tablet screens */
+  }
+}
+
+/* Responsive adjustments for mobile screens */
+@media (max-width: 768px) {
+  .container {
+    width: 95%;
+  }
+  .subscriptions {
+    grid-template-columns: 1fr; /* One column on mobile screens */
+  }
 }

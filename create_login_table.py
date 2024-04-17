@@ -5,11 +5,10 @@ dynamodb = boto3.client('dynamodb')
 
 table_name = 'login'
 
-# Set 'email' as the HASH (partition key)
 table_schema = [
     {
         'AttributeName': 'email',
-        'KeyType': 'HASH'  # Partition key
+        'KeyType': 'HASH' 
     }
 ]
 
@@ -36,14 +35,12 @@ except dynamodb.exceptions.ResourceInUseException:
 
 time.sleep(10) 
 
-# Check if the table is active
 table_status = dynamodb.describe_table(TableName=table_name)['Table']['TableStatus']
 if table_status == 'ACTIVE':
     print(f"Table '{table_name}' created successfully.")
 else:
     print(f"Table '{table_name}' creation failed or still in progress. Table status: {table_status}")
 
-# Add items to the table with 'email' as the primary key
 for i in range(10):
     email = f"s3876520{i}@student.rmit.edu.au"
     username = f"AndrewJoyce{i}"

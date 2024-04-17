@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Main Page</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="header">
+        <h1>Welcome, {{ username }}!</h1>
+    </div>
+    
+    <div class="container">
+        <div class="subscription-area">
+            <h2>Subscription Area</h2>
+            <div class="subscriptions">
+                {% for subscription in subscriptions %}
+                <div id="subscription-{{ subscription.id }}" class="subscription-item">
+                    <p>Title: {{ subscription.title }}</p>
+                    <p>Artist: {{ subscription.artist }}</p>
+                    <p>Year: {{ subscription.year }}</p>
+                    {% if subscription.img_url %}
+                        <img src="{{ subscription.img_url }}" alt="{{ subscription.artist }} Image">
+                    {% else %}
+                        <!-- Placeholder if no image is provided -->
+                        <img src="{{ url_for('static', filename='images/default_artist.png') }}" alt="Default Artist Image">
+                    {% endif %}
+                    <button onclick="removeSubscriptionFromView('{{ subscription.id }}')">Remove</button>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="query-area">
+            <h2>Query Area</h2>
+            <form>
+                <input type="text" name="title" placeholder="Title">
+                <input type="text" name="artist" placeholder="Artist">
+                <input type="text" name="year" placeholder="Year">
+                <button type="submit">Query</button>
+            </form>
+            <div class="query-results">
+                <!-- Query results will be appended here -->
+            </div>
+        </div>
+
+        <div class="logout-area">
+            <a href="{{ url_for('login') }}">Logout</a>
+        </div>
+    </div>
+
+    <script>
+        document.querySelector('form').addEventListener('submit', function(e) {
+            e.preventDefault(); 
+        
+            var title = document.querySelector('input[name="title"]').value;
+            var artist = document.querySelector('input[name="artist"]').value;
+            var year = document.querySelector('input[name="year"]').value;
+        
+            var queryData = { title: title, artist: artist, year: year };
+        
+            fetch('{{ url_for("query_music") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(queryData)
+            }).then(response => response.json())
+              .then(data => displayResults(data))
+              .catch(error => console.error('Error:', error));
+        });
+        
+        function displayResults(data) {
+            const resultsContainer = document.querySelector('.query-results');
+            resultsContainer.innerHTML = ''; 
+        
+            data.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'result-item';
+                div.innerHTML = `
+                    <p>Title: ${item.title}</p>
+                    <p>Artist: ${item.artist}</p>
+                    <p>Year: ${item.year}</p>
+                    <img src="${item.img_url || '{{ url_for("static", filename="images/default_artist.png") }}'}" alt="${item.artist} Image">
+                    <button onclick="subscribeToMusic('${item.subscribe_id}')">Subscribe</button>
+                `;
+                resultsContainer.appendChild(div);
+            });
+        }
+        
+        function removeSubscriptionFromView(subscriptionId) {
+            var subscriptionElement = document.getElementById('subscription-' + subscriptionId);
+            if (subscriptionElement) {
+                subscriptionElement.remove();
+            } else {
+                alert('Subscription not found on page.');
+            }
+        }
+        
+        function subscribeToMusic(subscribeId) {
+    console.log('Subscribe to music ID:', subscribeId);
+
+
+    const requestData = {
+        subscribeId: subscribeId  
+    };
+
+    fetch('/subscribe', {  
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestData)
+    })
+    .then(response => {
+        if (response.ok) {
+            return response.json();  
+        }
+        throw new Error('Network response was not ok.');
+    })
+    .then(data => {
+        console.log('Subscription successful:', data);
+        alert('Subscription successful!');  
+    })
+    .catch(error => {
+        console.error('Error during subscription:', error);
+        alert('Failed to subscribe. Please try again.');  
+    });
+}
+
+    </script>
+</body>
+</html>
