@@ -22,29 +22,39 @@ body {
   text-align: center;
 }
 
-/* Updated to apply to both subscription and search results areas */
-.subscription-area, .query-area, .results-area {
-  background-color: #4db6ac;
-  padding: 20px;
-  margin: 10px 0;
-  border-radius: 8px;
-}
-
-/* Updated to apply to both subscription and search results */
-.subscriptions, .results {
+.subscription-area, .results-area {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-  padding: 10px;
+  grid-template-columns: repeat(3, 1fr); /* three items per row */
+  gap: 20px; /* space between grid items */
+  margin-bottom: 20px; /* space below the whole grid */
 }
 
-/* This class is used for both subscription and search result items */
-.subscription-item {
-  background-color: white;
-  margin-bottom: 10px;
-  padding: 10px;
-  border-radius: 4px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+.subscription-item, .result-item {
+  background-color: #fff; /* white background */
+  border: 1px solid #ddd; /* light grey border */
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); /* drop shadow for depth */
+  border-radius: 5px; /* rounded corners */
+  overflow: hidden; /* ensures content fits within border-radius */
+  display: flex; /* use flexbox for layout within the card */
+  flex-direction: column; /* stack children vertically */
+}
+
+/* Styling for the image within each card */
+.subscription-item img, .result-item img {
+  width: 100%; /* full width of the card */
+  height: auto; /* maintain aspect ratio */
+}
+
+/* Music info styling */
+.subscription-item .music-info, .result-item .music-info {
+  padding: 15px; /* padding inside the music info area */
+  flex-grow: 1; /* fill available space, pushing the button down */
+}
+
+/* Title and artist text styling */
+.subscription-item h5,
+.subscription-item p {
+  margin: 5px 0; /* vertical spacing */
 }
 
 .card-title {

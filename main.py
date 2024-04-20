@@ -20,9 +20,10 @@ def check_credentials(email, password):
             }
         )
         if 'Item' in response:
+            username = response['Item'].get('username', {}).get('S')
             stored_password = response['Item'].get('password', {}).get('S')
             if stored_password == password:
-                return True, email
+                return True, username
             else:
                 return False, None
         else:
@@ -42,15 +43,15 @@ def login():
     if request.method == 'POST':
         email = request.form['email']  
         password = request.form['password']  
-        authenticated, _ = check_credentials(email, password)  
+        authenticated, username = check_credentials(email, password)  
         if authenticated:
             session['logged_in'] = True  
-            session['email'] = email  
-            app.logger.debug(f"User logged in: {email}")  
+            session['username'] = username  # Storing username in session
+            app.logger.debug(f"User logged in: {username}")  
             return redirect(url_for('main_page'))  
         else:
             flash('Email or password is invalid')  
-    return render_template('login.html') 
+    return render_template('login.html')
 
 
 @app.route('/main_page', methods=['GET', 'POST'])
@@ -77,8 +78,10 @@ def main_page():
                 logging.error(f"Error performing search: {e.response['Error']['Message']}")
                 flash('Error performing search.', 'error')
 
-    # Initial page load or non-POST request just renders the page
-    return render_template('main_page.html', results=results)
+    # Pass the username to the template
+    username = session.get('username')
+    return render_template('main_page.html', results=results, username=username)
+
 
 @app.route('/subscriptions', methods=['GET'])
 def fetch_subscriptions():
