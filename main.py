@@ -1,31 +1,31 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, current_app
+import logging
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 import boto3
+from boto3.dynamodb.conditions import Attr
 from botocore.exceptions import ClientError
+from boto3.dynamodb.conditions import Key
 
 app = Flask(__name__)
 app.secret_key = 'andrew_joyce'
 
-dynamodb = boto3.client('dynamodb', region_name='ap-southeast-2')
+dynamodb = boto3.resource('dynamodb', region_name='ap-southeast-2')
+music_table = dynamodb.Table('music')
 
 def check_credentials(email, password):
-    print(f"Checking credentials for email: '{email}', password: '{password}'")
     try:
-        response = dynamodb.get_item(
+        response = boto3.client('dynamodb').get_item(
             TableName='login',
             Key={
                 'email': {'S': email.strip()}
             }
         )
-        print(f"DynamoDB response: {response}")
         if 'Item' in response:
             stored_password = response['Item'].get('password', {}).get('S')
             if stored_password == password:
                 return True, email
             else:
-                print("Incorrect password retrieved from DynamoDB:", stored_password)
                 return False, None
         else:
-            print("No item found in DynamoDB for email:", email)
             return False, None
     except ClientError as e:
         error_message = f"Error accessing DynamoDB table: {e.response['Error']['Message']}"
@@ -39,200 +39,186 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    error = None
     if request.method == 'POST':
-        email = request.form['email']
-        password = request.form['password']
-        authenticated, _ = check_credentials(email, password)
+        email = request.form['email']  
+        password = request.form['password']  
+        authenticated, _ = check_credentials(email, password)  
         if authenticated:
-            # Store user email in session upon successful login
-            session['email'] = email
-            return redirect(url_for('main_page', email=email))
+            session['logged_in'] = True  
+            session['email'] = email  
+            app.logger.debug(f"User logged in: {email}")  
+            return redirect(url_for('main_page'))  
         else:
-            error = 'Email or password is invalid'
+            flash('Email or password is invalid')  
+    return render_template('login.html') 
 
-    return render_template('login.html', error=error)
 
-@app.route("/register", methods=["GET", "POST"])
-def register():
-    if request.method == "POST":
-        email = request.form['email']
-        username = request.form['username']
-        password = request.form['password']
+@app.route('/main_page', methods=['GET', 'POST'])
+def main_page():
+    if 'logged_in' in session and session['logged_in']:
+        email = session.get('email')
+
+        if not email:
+            flash('User email not found in session', 'error')
+            return redirect(url_for('logout'))
+
+        subscriptions = []
 
         try:
-            response = dynamodb.get_item(
-                TableName='login',
+            response = music_table.scan(
+                FilterExpression=Attr('subscriptions').contains(email)
+            )
+            subscriptions = response['Items']
+        except ClientError as e:
+            logging.error(f"Error fetching user subscriptions: {e.response['Error']['Message']}")
+            flash('An error occurred while fetching your subscriptions.', 'error')
+
+        results = []
+
+        if request.method == 'POST':
+            title = request.form.get('title', '')
+            artist = request.form.get('artist', '')
+            year = request.form.get('year', '')
+
+            condition = None
+            if title:
+                condition = Attr('title').contains(title)
+            if artist:
+                condition = (condition & Attr('artist').contains(artist)) if condition else Attr('artist').contains(artist)
+            if year:
+                condition = (condition & Attr('year').contains(year)) if condition else Attr('year').contains(year)
+
+            if condition:
+                response = music_table.scan(FilterExpression=condition)
+                results = response['Items']
+
+        return render_template('main_page.html', results=results, subscriptions=subscriptions)
+
+    else:
+        return redirect(url_for('login'))
+
+
+@app.route('/search', methods=['POST'])
+def search_music():
+    title = request.form.get('title', '')
+    artist = request.form.get('artist', '')
+    year = request.form.get('year', '')
+
+    condition = None
+    if title:
+        condition = Attr('title').eq(title)
+    if artist:
+        condition = (condition & Attr('artist').eq(artist)) if condition else Attr('artist').eq(artist)
+    if year:
+        condition = (condition & Attr('year').eq(year)) if condition else Attr('year').eq(year)
+
+    if condition:
+        response = music_table.scan(FilterExpression=condition)
+        results = response['Items']
+    else:
+        results = []
+
+    return render_template('main_page.html', results=results)
+
+@app.route('/subscribe', methods=['POST'])
+def subscribe():
+    if 'logged_in' in session:
+        email = session.get('email')
+        data = request.get_json()
+        title = data.get('title')
+        artist = data.get('artist')
+
+        if not email or not title or not artist:
+            return jsonify({'error': 'Missing title or artist data for subscription.'}), 400
+
+        try:
+            response = music_table.update_item(
                 Key={
-                    'email': {'S': email}
+                    'title': title,
+                    'artist': artist
+                },
+                UpdateExpression="SET subscriptions = list_append(if_not_exists(subscriptions, :empty_list), :email)",
+                ExpressionAttributeValues={
+                    ':email': [email],
+                    ':empty_list': [],
+                },
+                ReturnValues="UPDATED_NEW"
+            )
+            
+            subscribed_music = {
+                'title': title,
+                'artist': artist,
+                'img_url': data.get('img_url')  
+            }
+            
+            return jsonify({'success': 'Subscription added successfully!', 'subscribed_music': subscribed_music}), 200
+        except ClientError as e:
+            logging.error(f"Error subscribing to music: {e.response['Error']['Message']}")
+            return jsonify({'error': f"An error occurred while subscribing to music: {e.response['Error']['Message']}"}), 500
+    else:
+        return jsonify({'error': 'You must be logged in to subscribe.'}), 401
+
+from botocore.exceptions import ClientError
+
+@app.route('/remove_subscription', methods=['POST'])
+def remove_subscription():
+    if 'logged_in' in session and session.get('email'):
+        email = session['email'] 
+        data = request.get_json()
+        title = data.get('title')
+        artist = data.get('artist')
+
+        if not title or not artist:
+            logging.error("Missing title or artist data for removing subscription.")
+            return jsonify({'error': 'Missing title or artist data for removing subscription.'}), 400
+
+        try:
+            dynamodb = boto3.resource('dynamodb')
+            music_table = dynamodb.Table('music')
+            response = music_table.get_item(
+                Key={
+                    'title': title,
+                    'artist': artist
                 }
             )
-            if 'Item' in response:
-                flash('Email already registered. Please log in or use a different email.')
-                return redirect(url_for('register'))
-            else:
-                dynamodb.put_item(
-                    TableName='login',
-                    Item={
-                        'email': {'S': email},
-                        'username': {'S': username},
-                        'password': {'S': password}  
-                    }
+            item = response.get('Item')
+            if not item:
+                logging.error(f"Music item not found: {title}, {artist}")
+                return jsonify({'error': 'Music item not found.'}), 404
+
+            subscriptions = item.get('subscriptions', [])
+            if email in subscriptions:
+                subscriptions.remove(email)
+                response = music_table.update_item(
+                    Key={
+                        'title': title,
+                        'artist': artist
+                    },
+                    UpdateExpression="SET subscriptions = :subscriptions",
+                    ExpressionAttributeValues={
+                        ':subscriptions': subscriptions
+                    },
+                    ReturnValues="UPDATED_NEW"
                 )
-                flash('Registration successful. Please log in.')
-                return redirect(url_for('login'))
+                logging.info(f"Subscription removed successfully for user: {email} on music: {title}, {artist}")
+                return jsonify({'success': 'Subscription removed successfully!'}), 200
+            else:
+                logging.error(f"User {email} is not subscribed to this music: {title}, {artist}")
+                return jsonify({'error': 'User is not subscribed to this music.'}), 400
+
         except ClientError as e:
-            flash(f"Error accessing DynamoDB: {e.response['Error']['Message']}")
-            return redirect(url_for('register'))
-
-    return render_template('register.html')
-
-def get_username(email):
-    try:
-        response = dynamodb.get_item(
-            TableName='login',
-            Key={
-                'email': {'S': email.strip()}
-            }
-        )
-        if 'Item' in response:
-            return response['Item'].get('username', {}).get('S')
-        else:
-            return None
-    except ClientError as e:
-        flash(f"Error fetching username: {e.response['Error']['Message']}")
-        return None
+            logging.error(f"Error removing subscription: {e.response['Error']['Message']}")
+            return jsonify({'error': f"An error occurred while removing subscription: {e.response['Error']['Message']}"}), 500
+    else:
+        logging.error("Attempt to remove subscription without being logged in or missing email in session.")
+        return jsonify({'error': 'You must be logged in and email must be present to remove subscription.'}), 401
 
 
-def get_subscriptions(user_email):
-    try:
-        response = dynamodb.scan(
-            TableName='music',
-            FilterExpression='user_email = :email',
-            ExpressionAttributeValues={':email': {'S': user_email}}
-        )
-        return response.get('Items', [])
-    except ClientError as e:
-        flash(f"Error fetching subscriptions: {e.response['Error']['Message']}")
-        return []
-
-def get_artist_image(artist):
-    return None
-
-@app.route("/main_page", methods=["GET"])
-def main_page():
-    email = request.args.get('email')
-    if not email:
-        flash('You must be logged in to access the main page.')
-        return redirect(url_for('login'))
-
-    username = get_username(email)
-    if not username:
-        flash('Username not found.')
-        return redirect(url_for('login'))
-
-    try:
-        response = dynamodb.scan(TableName='music')
-        music_items = []
-        for item in response.get('Items', []):
-            music_item = {}
-            for key, value in item.items():
-                if 'S' in value:
-                    music_item[key] = value['S']
-                elif 'N' in value:
-                    music_item[key] = value['N']
-                elif 'L' in value:
-                    music_item[key] = ', '.join(v['S'] for v in value['L'] if 'S' in v)
-                elif 'M' in value:
-                    music_item[key] = str({k: v.get('S', '') for k, v in value['M'].items()})
-                else:
-                    music_item[key] = 'Undefined or missing type'
-            music_items.append(music_item)
-    except ClientError as e:
-        flash(f"Error fetching music items: {e.response['Error']['Message']}")
-        music_items = []
-
-    return render_template('main_page.html', username=username, subscriptions=music_items)
-
-@app.route("/query_music", methods=["POST"])
-def query_music():
-    if not request.is_json:
-        return 'Content-Type not supported', 415
-
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'Missing data'}), 400
-
-    title = data.get('title', '').strip()
-    artist = data.get('artist', '').strip()
-    year = data.get('year', '').strip()
-
-    filter_expressions = []
-    expression_attribute_names = {}
-    expression_attributes = {}
-
-    if title:
-        filter_expressions.append("contains(#t, :title)")
-        expression_attribute_names['#t'] = 'title'
-        expression_attributes[':title'] = {'S': title}
-    if artist:
-        filter_expressions.append("contains(#a, :artist)")
-        expression_attribute_names['#a'] = 'artist'
-        expression_attributes[':artist'] = {'S': artist}
-    if year:
-        filter_expressions.append("#y = :year")
-        expression_attribute_names['#y'] = 'year'
-        expression_attributes[':year'] = {'S': year}
-
-    filter_expression = " AND ".join(filter_expressions) if filter_expressions else None
-
-    try:
-        if filter_expression:
-            response = dynamodb.scan(
-                TableName='music',
-                FilterExpression=filter_expression,
-                ExpressionAttributeNames=expression_attribute_names,
-                ExpressionAttributeValues=expression_attributes
-            )
-        else:
-            return jsonify({'message': "No search criteria were provided"}), 400
-
-        items = response.get('Items', [])
-        if not items:
-            return jsonify({'message': "No result is retrieved. Please query again"}), 200
-
-        queried_music = [{
-            'title': item.get('title', {}).get('S', 'No Title Provided'),
-            'artist': item.get('artist', {}).get('S', 'No Artist Provided'),
-            'year': item.get('year', {}).get('S', 'No Year Provided'),
-            'img_url': item.get('img_url', {}).get('S', ''),
-            'subscribe_id': item.get('id', {}).get('S', '')
-        } for item in items]
-
-        return jsonify(queried_music)
-    except ClientError as e:
-        current_app.logger.error(f"DynamoDB Client Error: {e}")
-        return jsonify({'error': 'Error fetching from DynamoDB'}), 500
-    except Exception as e:
-        current_app.logger.error(f"Server Error: {e}")
-        return jsonify({'error': 'Internal Server Error'}), 500
-
-@app.route("/unsubscribe", methods=["POST"])
-def remove_subscription():
-    subscription_id = request.form.get('subscription_id')
-
-    try:
-        response = dynamodb.delete_item(
-            TableName='user_subscriptions',  
-            Key={
-                'user_email': {'S': session.get('email')},
-                'music_id': {'S': subscription_id},  
-            }
-        )
-        return jsonify({'message': 'Unsubscription successful'}), 200
-
-    except ClientError as e:
-        return jsonify({'error': str(e.response['Error']['Message'])}), 500
+@app.route('/logout')
+def logout():
+    session.pop('logged_in', None)
+    session.pop('subscriptions', None)
+    return redirect(url_for('login'))
 
 if __name__ == "__main__":
     app.run(debug=True)

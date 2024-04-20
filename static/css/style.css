@@ -11,31 +11,34 @@ body {
 .container {
   width: 80%;
   max-width: 1200px;
-  margin-top: 20px; /* Only top margin to push container down from the header */
+  margin-top: 20px;
 }
 
 .header {
-  background-color: #009688;
+  background-color: lightblue;
   color: white;
   padding: 10px 0;
   width: 100%;
   text-align: center;
 }
 
-.subscription-area, .query-area {
+/* Updated to apply to both subscription and search results areas */
+.subscription-area, .query-area, .results-area {
   background-color: #4db6ac;
   padding: 20px;
   margin: 10px 0;
   border-radius: 8px;
 }
 
-.subscriptions {
+/* Updated to apply to both subscription and search results */
+.subscriptions, .results {
   display: grid;
-  grid-template-columns: repeat(3, 1fr); /* Three columns by default */
-  gap: 20px; /* Space between grid items */
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
   padding: 10px;
 }
 
+/* This class is used for both subscription and search result items */
 .subscription-item {
   background-color: white;
   margin-bottom: 10px;
@@ -44,6 +47,16 @@ body {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+.card-title {
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.card-text {
+  margin-bottom: 10px;
+}
+
+/* Input styles unchanged */
 input[type="email"], input[type="text"], input[type="password"] {
   width: 100%;
   padding: 10px;
@@ -53,8 +66,9 @@ input[type="email"], input[type="text"], input[type="password"] {
   box-sizing: border-box;
 }
 
+/* Button styles unchanged */
 button {
-  width: 100%;
+  width: auto;
   padding: 10px;
   margin-top: 10px;
   border: none;
@@ -69,6 +83,7 @@ button:hover {
   background-color: #543c9c;
 }
 
+/* Anchor tag styles unchanged */
 a {
   display: block;
   margin-top: 20px;
@@ -81,6 +96,7 @@ a:hover {
   text-decoration: underline;
 }
 
+/* Error message styles unchanged */
 .error {
   color: red;
   margin-top: 10px;
@@ -88,8 +104,8 @@ a:hover {
 
 /* Responsive adjustments for tablet screens */
 @media (max-width: 1024px) {
-  .subscriptions {
-    grid-template-columns: repeat(2, 1fr); /* Two columns on tablet screens */
+  .subscriptions, .results {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
@@ -98,7 +114,46 @@ a:hover {
   .container {
     width: 95%;
   }
-  .subscriptions {
-    grid-template-columns: 1fr; /* One column on mobile screens */
+  .subscriptions, .results {
+    grid-template-columns: 1fr;
   }
+  .card-img {
+    display: block; 
+    max-width: 90%; 
+    height: auto; 
+    margin: 10px auto; 
+    border-radius: 4px; 
+  }  
+  
+  .subscription-item {
+    background-color: white;
+    margin-bottom: 10px;
+    padding: 10px;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    text-align: center; /* Center the text and button */
+  }
+  
+  .card-img {
+    display: block;
+    max-width: 100%; /* Adjust if necessary to leave some space around the image */
+    height: auto;
+    margin: 10px auto; /* Adds margin to the top and bottom and auto to the sides for centering */
+    border-radius: 4px;
+  }
+  
+  .btn-primary {
+    background-color: #007bff; /* Bootstrap primary button color */
+    color: white;
+    padding: 10px 20px;
+    margin: 10px 0; /* Spacing above and below the button */
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  
+  .btn-primary:hover {
+    background-color: #0056b3; /* Darken the button on hover */
+  }  
+
 }

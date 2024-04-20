@@ -4,131 +4,153 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Main Page</title>
-    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <div class="header">
-        <h1>Welcome, {{ username }}!</h1>
-    </div>
-    
     <div class="container">
-        <div class="subscription-area">
-            <h2>Subscription Area</h2>
-            <div class="subscriptions">
+        <h1>Welcome, {{ user_name }}</h1>
+        <h2>Your Music Subscriptions</h2>
+        <div id="subscription-area" class="subscription-area">
+            {% if subscriptions %}
                 {% for subscription in subscriptions %}
-                <div id="subscription-{{ subscription.id }}" class="subscription-item">
-                    <p>Title: {{ subscription.title }}</p>
-                    <p>Artist: {{ subscription.artist }}</p>
-                    <p>Year: {{ subscription.year }}</p>
-                    {% if subscription.img_url %}
-                        <img src="{{ subscription.img_url }}" alt="{{ subscription.artist }} Image">
-                    {% else %}
-                        <!-- Placeholder if no image is provided -->
-                        <img src="{{ url_for('static', filename='images/default_artist.png') }}" alt="Default Artist Image">
-                    {% endif %}
-                    <button onclick="removeSubscriptionFromView('{{ subscription.id }}')">Remove</button>
+                <div class="subscription-item">
+                    <img src="{{ subscription.img_url }}" alt="{{ subscription.artist }} image" class="artist-img">
+                    <div class="music-info">
+                        <h5>{{ subscription.title }}</h5>
+                        <p>Artist: {{ subscription.artist }}</p>
+                        <p>Year: {{ subscription.year }}</p>
+                        <button class="remove-btn" data-title="{{ subscription.title }}" data-artist="{{ subscription.artist }}">Remove</button>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+            <p>No subscriptions found.</p>
+            {% endif %}
+        </div>
+        
+        <h2>Search Results</h2>
+        <div class="results-area">
+            {% if results %}
+            <div class="results">
+                {% for result in results %}
+                <div class="subscription-item">
+                    <img src="{{ result.img_url }}" alt="{{ result.artist }} image" class="artist-img">
+                    <div class="music-info">
+                        <h5>{{ result.title }}</h5>
+                        <p>Artist: {{ result.artist }}</p>
+                        <p>Year: {{ result.year }}</p>
+                        <button class="btn btn-primary subscribe-btn" data-title="{{ result.title }}" data-artist="{{ result.artist }}" data-img="{{ result.img_url }}">Subscribe</button>
+                    </div>
                 </div>
                 {% endfor %}
             </div>
+            {% else %}
+            <p>No search results found.</p>
+            {% endif %}
         </div>
 
-        <div class="query-area">
-            <h2>Query Area</h2>
-            <form>
-                <input type="text" name="title" placeholder="Title">
-                <input type="text" name="artist" placeholder="Artist">
-                <input type="text" name="year" placeholder="Year">
-                <button type="submit">Query</button>
-            </form>
-            <div class="query-results">
-                <!-- Query results will be appended here -->
-            </div>
-        </div>
+        <h2>Search for Music</h2>
+        <form action="/search" method="post" class="form-inline">
+            <input type="text" name="title" placeholder="Title" class="form-control mb-2 mr-sm-2">
+            <input type="text" name="artist" placeholder="Artist" class="form-control mb-2 mr-sm-2">
+            <input type="text" name="year" placeholder="Year" class="form-control mb-2 mr-sm-2">
+            <button type="submit" class="btn btn-primary mb-2">Query</button>
+        </form>
 
-        <div class="logout-area">
-            <a href="{{ url_for('login') }}">Logout</a>
-        </div>
+        <a href="/logout" class="btn btn-secondary mt-2">Logout</a>
     </div>
 
     <script>
-        document.querySelector('form').addEventListener('submit', function(e) {
-            e.preventDefault(); 
-        
-            var title = document.querySelector('input[name="title"]').value;
-            var artist = document.querySelector('input[name="artist"]').value;
-            var year = document.querySelector('input[name="year"]').value;
-        
-            var queryData = { title: title, artist: artist, year: year };
-        
-            fetch('{{ url_for("query_music") }}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(queryData)
-            }).then(response => response.json())
-              .then(data => displayResults(data))
-              .catch(error => console.error('Error:', error));
-        });
-        
-        function displayResults(data) {
-            const resultsContainer = document.querySelector('.query-results');
-            resultsContainer.innerHTML = ''; 
-        
-            data.forEach(item => {
-                const div = document.createElement('div');
-                div.className = 'result-item';
-                div.innerHTML = `
-                    <p>Title: ${item.title}</p>
-                    <p>Artist: ${item.artist}</p>
-                    <p>Year: ${item.year}</p>
-                    <img src="${item.img_url || '{{ url_for("static", filename="images/default_artist.png") }}'}" alt="${item.artist} Image">
-                    <button onclick="subscribeToMusic('${item.subscribe_id}')">Subscribe</button>
-                `;
-                resultsContainer.appendChild(div);
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.subscribe-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(event) {
+                event.preventDefault();
+                var item = this.closest('.subscription-item'); 
+                var title = this.getAttribute('data-title');
+                var artist = this.getAttribute('data-artist');
+                var img_url = this.getAttribute('data-img');
+                subscribeToMusic(title, artist, img_url, item); 
             });
-        }
-        
-        function removeSubscriptionFromView(subscriptionId) {
-            var subscriptionElement = document.getElementById('subscription-' + subscriptionId);
-            if (subscriptionElement) {
-                subscriptionElement.remove();
+        });
+    });
+
+    function subscribeToMusic(title, artist, img_url, item) {
+        fetch('/subscribe', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ title: title, artist: artist, img_url: img_url })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.success);
+                document.getElementById('subscription-area').appendChild(item);
+                item.querySelector('.btn-primary').classList.replace('btn-primary', 'remove-btn');
+                item.querySelector('.remove-btn').textContent = 'Remove';
+                item.querySelector('.remove-btn').addEventListener('click', function(event) {
+                    event.preventDefault();
+                    removeSubscription(title, artist, item);
+                });
             } else {
-                alert('Subscription not found on page.');
+                throw new Error(data.error || 'Failed to subscribe to music');
             }
-        }
+        })
+        .catch(error => {
+            console.error('Error subscribing to music:', error);
+            alert('Error subscribing to music: ' + error.message);
+        });
+    }
         
-        function subscribeToMusic(subscribeId) {
-    console.log('Subscribe to music ID:', subscribeId);
 
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.remove-btn').forEach(function(btn) {
+        btn.addEventListener('click', function(event) {
+            event.preventDefault();
+            var title = this.getAttribute('data-title');
+            var artist = this.getAttribute('data-artist');
+            var subscriptionItem = this.closest('.subscription-item');
 
-    const requestData = {
-        subscribeId: subscribeId  
-    };
+            console.log("Requesting removal of subscription:", title, "by", artist);
+            removeSubscription(title, artist, subscriptionItem); 
+        });
+    });
+});
 
-    fetch('/subscribe', {  
+function removeSubscription(title, artist, subscriptionItem) {
+    console.log("Attempting to remove subscription for:", title, artist);
+
+    fetch('/remove_subscription', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify(requestData)
+        body: JSON.stringify({ title: title, artist: artist })
     })
     .then(response => {
-        if (response.ok) {
-            return response.json();  
+        if (!response.ok) {
+            throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
         }
-        throw new Error('Network response was not ok.');
+        return response.json();
     })
     .then(data => {
-        console.log('Subscription successful:', data);
-        alert('Subscription successful!');  
+        if (data.success) {
+            console.log("Removal successful for:", title, artist);
+            alert("Subscription successfully removed.");
+            if (subscriptionItem) {
+                subscriptionItem.remove(); 
+            }
+        } else {
+            console.error("Failed to remove subscription:", data.error);
+            alert("Failed to remove subscription: " + data.error);
+        }
     })
     .catch(error => {
-        console.error('Error during subscription:', error);
-        alert('Failed to subscribe. Please try again.');  
+        console.error("Error removing subscription:", error);
+        alert("Error removing subscription: " + error.message);
     });
 }
-
     </script>
 </body>
 </html>
