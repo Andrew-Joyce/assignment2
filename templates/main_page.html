@@ -9,44 +9,15 @@
 <body>
     <div class="container">
         <h1>Welcome, {{ user_name }}</h1>
+
         <h2>Your Music Subscriptions</h2>
         <div id="subscription-area" class="subscription-area">
-            {% if subscriptions %}
-                {% for subscription in subscriptions %}
-                <div class="subscription-item">
-                    <img src="{{ subscription.img_url }}" alt="{{ subscription.artist }} image" class="artist-img">
-                    <div class="music-info">
-                        <h5>{{ subscription.title }}</h5>
-                        <p>Artist: {{ subscription.artist }}</p>
-                        <p>Year: {{ subscription.year }}</p>
-                        <button class="remove-btn" data-title="{{ subscription.title }}" data-artist="{{ subscription.artist }}">Remove</button>
-                    </div>
-                </div>
-                {% endfor %}
-            {% else %}
-            <p>No subscriptions found.</p>
-            {% endif %}
+            <!-- Subscription items will be loaded here by JavaScript -->
         </div>
-        
+
         <h2>Search Results</h2>
         <div class="results-area">
-            {% if results %}
-            <div class="results">
-                {% for result in results %}
-                <div class="subscription-item">
-                    <img src="{{ result.img_url }}" alt="{{ result.artist }} image" class="artist-img">
-                    <div class="music-info">
-                        <h5>{{ result.title }}</h5>
-                        <p>Artist: {{ result.artist }}</p>
-                        <p>Year: {{ result.year }}</p>
-                        <button class="btn btn-primary subscribe-btn" data-title="{{ result.title }}" data-artist="{{ result.artist }}" data-img="{{ result.img_url }}">Subscribe</button>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-            {% else %}
-            <p>No search results found.</p>
-            {% endif %}
+            <!-- Search results will appear here -->
         </div>
 
         <h2>Search for Music</h2>
@@ -60,97 +31,125 @@
         <a href="/logout" class="btn btn-secondary mt-2">Logout</a>
     </div>
 
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        document.querySelectorAll('.subscribe-btn').forEach(function(btn) {
-            btn.addEventListener('click', function(event) {
-                event.preventDefault();
-                var item = this.closest('.subscription-item'); 
-                var title = this.getAttribute('data-title');
-                var artist = this.getAttribute('data-artist');
-                var img_url = this.getAttribute('data-img');
-                subscribeToMusic(title, artist, img_url, item); 
-            });
-        });
-    });
-
-    function subscribeToMusic(title, artist, img_url, item) {
-        fetch('/subscribe', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ title: title, artist: artist, img_url: img_url })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                alert(data.success);
-                document.getElementById('subscription-area').appendChild(item);
-                item.querySelector('.btn-primary').classList.replace('btn-primary', 'remove-btn');
-                item.querySelector('.remove-btn').textContent = 'Remove';
-                item.querySelector('.remove-btn').addEventListener('click', function(event) {
-                    event.preventDefault();
-                    removeSubscription(title, artist, item);
-                });
-            } else {
-                throw new Error(data.error || 'Failed to subscribe to music');
-            }
-        })
-        .catch(error => {
-            console.error('Error subscribing to music:', error);
-            alert('Error subscribing to music: ' + error.message);
-        });
-    }
+        $(document).ready(function() {
+            fetchSubscriptions();  // Existing function to fetch subscriptions
         
+            // Updated event handler for form submission
+            $('form').submit(function(event) {
+                event.preventDefault();  // Prevent the default form submission via HTTP
 
-document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.remove-btn').forEach(function(btn) {
-        btn.addEventListener('click', function(event) {
-            event.preventDefault();
-            var title = this.getAttribute('data-title');
-            var artist = this.getAttribute('data-artist');
-            var subscriptionItem = this.closest('.subscription-item');
+                var formData = {
+                    title: $('input[name="title"]').val(),
+                    artist: $('input[name="artist"]').val(),
+                    year: $('input[name="year"]').val()
+                };
 
-            console.log("Requesting removal of subscription:", title, "by", artist);
-            removeSubscription(title, artist, subscriptionItem); 
-        });
-    });
-});
+                // Post the form data to the search endpoint and handle the response
+                $.post('/search', formData, function(data) {
+                    $('.results-area').empty();  // Clear the previous results
+                    if (data.error) {
+                        alert("Error searching for music: " + data.message);
+                    } else {
+                        if (data.results.length === 0) {
+                            $('.results-area').html('<p>No results found. Please query again.</p>');
+                        } else {
+                            data.results.forEach(function(item) {
+                                $('.results-area').append(
+                                    `<div class="result-item">
+                                        <img src="${item.img_url || 'path/to/default/image.jpg'}" alt="${item.artist} image" class="artist-img">
+                                        <div class="music-info">
+                                            <h5>${item.title}</h5>
+                                            <p>Artist: ${item.artist}</p>
+                                            <p>Year: ${item.year}</p>
+                                            <button class="subscribe-btn" data-title="${item.title}" data-artist="${item.artist}" data-img_url="${item.img_url || 'path/to/default/image.jpg'}">Subscribe</button>
+                                        </div>
+                                    </div>`
+                                );
+                            });
+                            attachSubscribeHandlers();
+                        }
+                    }
+                }, 'json').fail(function(xhr) {
+                    alert("Error searching for music: " + xhr.responseText);
+                });
+            });
 
-function removeSubscription(title, artist, subscriptionItem) {
-    console.log("Attempting to remove subscription for:", title, artist);
-
-    fetch('/remove_subscription', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ title: title, artist: artist })
-    })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
-        }
-        return response.json();
-    })
-    .then(data => {
-        if (data.success) {
-            console.log("Removal successful for:", title, artist);
-            alert("Subscription successfully removed.");
-            if (subscriptionItem) {
-                subscriptionItem.remove(); 
+            function fetchSubscriptions() {
+                $.get('/subscriptions', function(data) {
+                    $('#subscription-area').empty(); // Clear existing subscriptions
+                    data.forEach(function(subscription) {
+                        $('#subscription-area').append(
+                            `<div class="subscription-item">
+                                <img src="${subscription.img_url}" alt="${subscription.artist} image" class="artist-img">
+                                <div class="music-info">
+                                    <h5>${subscription.title}</h5>
+                                    <p>Artist: ${subscription.artist}</p>
+                                    <p>Year: ${subscription.year}</p>
+                                    <button class="remove-btn" data-title="${subscription.title}" data-artist="${subscription.artist}">Remove</button>
+                                </div>
+                            </div>`
+                        );
+                        attachRemoveHandlers();
+                    });
+                }).fail(function() {
+                    alert('Failed to fetch subscriptions.');
+                });
             }
-        } else {
-            console.error("Failed to remove subscription:", data.error);
-            alert("Failed to remove subscription: " + data.error);
-        }
-    })
-    .catch(error => {
-        console.error("Error removing subscription:", error);
-        alert("Error removing subscription: " + error.message);
-    });
-}
+
+            function attachSubscribeHandlers() {
+                $('.subscribe-btn').click(function(event) {
+                    event.preventDefault();
+                    var $this = $(this);
+                    var subscriptionData = {
+                        title: $this.data('title'),
+                        artist: $this.data('artist'),
+                        img_url: $this.data('img_url')
+                    };
+
+                    $.ajax({
+                        url: '/subscribe',
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify(subscriptionData),
+                        success: function(data) {
+                            if (data.success) {
+                                alert("Successfully subscribed to " + subscriptionData.title);
+                            } else {
+                                alert("Subscription failed: " + data.error);
+                            }
+                        },
+                        error: function(response) {
+                            alert("Error subscribing: " + response.statusText);
+                        }
+                    });
+                });
+            }
+
+            function attachRemoveHandlers() {
+                $('.remove-btn').click(function(event) {
+                    event.preventDefault();
+                    var title = $(this).data('title');
+                    var artist = $(this).data('artist');
+                    var subscriptionItem = $(this).closest('.subscription-item');
+                    removeSubscription(title, artist, subscriptionItem);
+                });
+            }
+
+            function removeSubscription(title, artist, subscriptionItem) {
+                $.post('/remove_subscription', JSON.stringify({ title: title, artist: artist }), function(data) {
+                    if (data.success) {
+                        alert("Subscription successfully removed.");
+                        subscriptionItem.remove();
+                    } else {
+                        alert("Failed to remove subscription: " + data.error);
+                    }
+                }, 'json').fail(function(response) {
+                    alert("Error removing subscription: " + response.statusText);
+                });
+            }
+        });
     </script>
 </body>
 </html>

@@ -55,47 +55,53 @@ def login():
 
 @app.route('/main_page', methods=['GET', 'POST'])
 def main_page():
-    if 'logged_in' in session and session['logged_in']:
-        email = session.get('email')
+    results = []
+    if request.method == 'POST' and 'logged_in' in session and session['logged_in']:
+        title = request.form.get('title', '')
+        artist = request.form.get('artist', '')
+        year = request.form.get('year', '')
 
-        if not email:
-            flash('User email not found in session', 'error')
-            return redirect(url_for('logout'))
+        condition = None
+        if title:
+            condition = Attr('title').contains(title)
+        if artist:
+            condition = (condition & Attr('artist').contains(artist)) if condition else Attr('artist').contains(artist)
+        if year:
+            condition = (condition & Attr('year').contains(year)) if condition else Attr('year').contains(year)
 
-        subscriptions = []
-
-        try:
-            response = music_table.scan(
-                FilterExpression=Attr('subscriptions').contains(email)
-            )
-            subscriptions = response['Items']
-        except ClientError as e:
-            logging.error(f"Error fetching user subscriptions: {e.response['Error']['Message']}")
-            flash('An error occurred while fetching your subscriptions.', 'error')
-
-        results = []
-
-        if request.method == 'POST':
-            title = request.form.get('title', '')
-            artist = request.form.get('artist', '')
-            year = request.form.get('year', '')
-
-            condition = None
-            if title:
-                condition = Attr('title').contains(title)
-            if artist:
-                condition = (condition & Attr('artist').contains(artist)) if condition else Attr('artist').contains(artist)
-            if year:
-                condition = (condition & Attr('year').contains(year)) if condition else Attr('year').contains(year)
-
-            if condition:
+        if condition:
+            try:
                 response = music_table.scan(FilterExpression=condition)
                 results = response['Items']
+            except ClientError as e:
+                logging.error(f"Error performing search: {e.response['Error']['Message']}")
+                flash('Error performing search.', 'error')
 
-        return render_template('main_page.html', results=results, subscriptions=subscriptions)
+    # Initial page load or non-POST request just renders the page
+    return render_template('main_page.html', results=results)
 
+@app.route('/subscriptions', methods=['GET'])
+def fetch_subscriptions():
+    if 'logged_in' in session and session['logged_in']:
+        email = session.get('email')
+        if not email:
+            logging.error("No email found in session")
+            return jsonify({'error': 'Session error'}), 400
+
+        dynamodb = boto3.resource('dynamodb')
+        music_table = dynamodb.Table('music')
+        try:
+            subscription_response = music_table.scan(
+                FilterExpression=Attr('subscriptions').contains(email)
+            )
+            subscriptions = subscription_response['Items']
+            return jsonify(subscriptions), 200
+        except Exception as e:
+            logging.error(f"Error fetching user subscriptions: {str(e)}")
+            return jsonify({'error': 'Error fetching subscriptions'}), 500
     else:
-        return redirect(url_for('login'))
+        logging.error("Unauthorized access attempted to subscriptions")
+        return jsonify({'error': 'Unauthorized'}), 401
 
 
 @app.route('/search', methods=['POST'])
@@ -103,9 +109,6 @@ def search_music():
     title = request.form.get('title', '')
     artist = request.form.get('artist', '')
     year = request.form.get('year', '')
-
-    dynamodb = boto3.resource('dynamodb')
-    music_table = dynamodb.Table('music')
 
     filter_expression = None
     if title:
@@ -125,15 +128,15 @@ def search_music():
             filter_expression = Attr('year').contains(year)
 
     try:
+        results = []
         if filter_expression:
             response = music_table.scan(FilterExpression=filter_expression)
             results = response['Items']
-        else:
-            results = []
-        return render_template('main_page.html', results=results)  
+        logging.debug(f"Search results: {results}")  # Log the results
+        return jsonify(results=results)  # Return results as JSON
     except ClientError as e:
-        print(f"An error occurred: {e.response['Error']['Message']}")
-        return render_template('main_page.html', error=e.response['Error']['Message'])  
+        logging.error(f"Error performing search: {e.response['Error']['Message']}")
+        return jsonify({'error': 'Error performing search', 'message': str(e)}), 500
 
 @app.route('/subscribe', methods=['POST'])
 def subscribe():
