@@ -100,25 +100,45 @@ def main_page():
 
 @app.route('/search', methods=['POST'])
 def search_music():
+    # Extract search terms from POST request
     title = request.form.get('title', '')
     artist = request.form.get('artist', '')
     year = request.form.get('year', '')
 
-    condition = None
+    # Connect to DynamoDB and get the 'music' table
+    dynamodb = boto3.resource('dynamodb')
+    music_table = dynamodb.Table('music')
+
+    # Prepare a filter expression for partial matches
+    filter_expression = None
     if title:
-        condition = Attr('title').eq(title)
+        if filter_expression:
+            filter_expression &= Attr('title').contains(title)
+        else:
+            filter_expression = Attr('title').contains(title)
     if artist:
-        condition = (condition & Attr('artist').eq(artist)) if condition else Attr('artist').eq(artist)
+        if filter_expression:
+            filter_expression &= Attr('artist').contains(artist)
+        else:
+            filter_expression = Attr('artist').contains(artist)
     if year:
-        condition = (condition & Attr('year').eq(year)) if condition else Attr('year').eq(year)
+        if filter_expression:
+            filter_expression &= Attr('year').contains(year)
+        else:
+            filter_expression = Attr('year').contains(year)
 
-    if condition:
-        response = music_table.scan(FilterExpression=condition)
-        results = response['Items']
-    else:
-        results = []
-
-    return render_template('main_page.html', results=results)
+    # Perform the scan operation with the filter expression if it exists
+    try:
+        if filter_expression:
+            response = music_table.scan(FilterExpression=filter_expression)
+            results = response['Items']
+        else:
+            results = []
+        return render_template('main_page.html', results=results)  # Render template with results
+    except ClientError as e:
+        # Log and handle potential errors
+        print(f"An error occurred: {e.response['Error']['Message']}")
+        return render_template('main_page.html', error=e.response['Error']['Message'])  # Render template with error
 
 @app.route('/subscribe', methods=['POST'])
 def subscribe():
