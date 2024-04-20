@@ -177,56 +177,56 @@ from botocore.exceptions import ClientError
 
 @app.route('/remove_subscription', methods=['POST'])
 def remove_subscription():
-    if 'logged_in' in session and session.get('email'):
-        email = session['email'] 
+    if 'logged_in' in session:
+        email = session.get('email')
         data = request.get_json()
         title = data.get('title')
         artist = data.get('artist')
 
+        logging.debug(f"Received removal request for: {title} by {artist} from {email}")
+
         if not title or not artist:
-            logging.error("Missing title or artist data for removing subscription.")
-            return jsonify({'error': 'Missing title or artist data for removing subscription.'}), 400
+            logging.debug(f"Missing data: title={title}, artist={artist}")
+            logging.error("Missing title or artist in the request data.")
+            return jsonify({'error': 'Missing title or artist data.'}), 400
 
         try:
-            dynamodb = boto3.resource('dynamodb')
-            music_table = dynamodb.Table('music')
-            response = music_table.get_item(
-                Key={
-                    'title': title,
-                    'artist': artist
-                }
+            # Fetch the current item to get the list of subscriptions
+            item_response = music_table.get_item(Key={'title': title, 'artist': artist})
+            if 'Item' not in item_response or 'subscriptions' not in item_response['Item']:
+                logging.error("No subscriptions found for the item or item does not exist.")
+                return jsonify({'error': 'No subscriptions found or item does not exist.'}), 404
+            
+            subscriptions = item_response['Item']['subscriptions']
+            if email not in subscriptions:
+                logging.error("Email not subscribed.")
+                return jsonify({'error': 'Email not subscribed to this item.'}), 404
+
+            # Determine the index of the email in the subscriptions list
+            index_to_remove = subscriptions.index(email)
+
+            # Remove the email using the index
+            response = music_table.update_item(
+                Key={'title': title, 'artist': artist},
+                UpdateExpression=f"REMOVE subscriptions[{index_to_remove}]",
+                ReturnValues="UPDATED_NEW"
             )
-            item = response.get('Item')
-            if not item:
-                logging.error(f"Music item not found: {title}, {artist}")
-                return jsonify({'error': 'Music item not found.'}), 404
-
-            subscriptions = item.get('subscriptions', [])
-            if email in subscriptions:
-                subscriptions.remove(email)
-                response = music_table.update_item(
-                    Key={
-                        'title': title,
-                        'artist': artist
-                    },
-                    UpdateExpression="SET subscriptions = :subscriptions",
-                    ExpressionAttributeValues={
-                        ':subscriptions': subscriptions
-                    },
-                    ReturnValues="UPDATED_NEW"
-                )
-                logging.info(f"Subscription removed successfully for user: {email} on music: {title}, {artist}")
-                return jsonify({'success': 'Subscription removed successfully!'}), 200
-            else:
-                logging.error(f"User {email} is not subscribed to this music: {title}, {artist}")
-                return jsonify({'error': 'User is not subscribed to this music.'}), 400
-
+            logging.info(f"Update response: {response}")
+            return jsonify({'success': 'Subscription removed successfully!'}), 200
         except ClientError as e:
-            logging.error(f"Error removing subscription: {e.response['Error']['Message']}")
-            return jsonify({'error': f"An error occurred while removing subscription: {e.response['Error']['Message']}"}), 500
+            logging.error("DynamoDB client error: " + str(e))
+            logging.debug(f"DynamoDB client error details: {e.response['Error']}")
+            return jsonify({'error': 'DynamoDB error: ' + str(e)}), 500
+        except Exception as e:
+            logging.error("General error: " + str(e))
+            logging.debug(f"General error details: {e}")
+            return jsonify({'error': 'Server error: ' + str(e)}), 500
     else:
-        logging.error("Attempt to remove subscription without being logged in or missing email in session.")
-        return jsonify({'error': 'You must be logged in and email must be present to remove subscription.'}), 401
+        logging.debug("Unauthorized access attempt.")
+        logging.error("You must be logged in to subscribe.")
+        return jsonify({'error': 'You must be logged in to subscribe.'}), 401
+
+
 
 
 @app.route('/logout')
