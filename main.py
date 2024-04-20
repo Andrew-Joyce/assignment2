@@ -100,16 +100,13 @@ def main_page():
 
 @app.route('/search', methods=['POST'])
 def search_music():
-    # Extract search terms from POST request
     title = request.form.get('title', '')
     artist = request.form.get('artist', '')
     year = request.form.get('year', '')
 
-    # Connect to DynamoDB and get the 'music' table
     dynamodb = boto3.resource('dynamodb')
     music_table = dynamodb.Table('music')
 
-    # Prepare a filter expression for partial matches
     filter_expression = None
     if title:
         if filter_expression:
@@ -127,18 +124,16 @@ def search_music():
         else:
             filter_expression = Attr('year').contains(year)
 
-    # Perform the scan operation with the filter expression if it exists
     try:
         if filter_expression:
             response = music_table.scan(FilterExpression=filter_expression)
             results = response['Items']
         else:
             results = []
-        return render_template('main_page.html', results=results)  # Render template with results
+        return render_template('main_page.html', results=results)  
     except ClientError as e:
-        # Log and handle potential errors
         print(f"An error occurred: {e.response['Error']['Message']}")
-        return render_template('main_page.html', error=e.response['Error']['Message'])  # Render template with error
+        return render_template('main_page.html', error=e.response['Error']['Message'])  
 
 @app.route('/subscribe', methods=['POST'])
 def subscribe():
