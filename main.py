@@ -41,17 +41,58 @@ def index():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        email = request.form['email']  
-        password = request.form['password']  
-        authenticated, username = check_credentials(email, password)  
+        email = request.form['email']
+        password = request.form['password']
+        authenticated, username = check_credentials(email, password)
         if authenticated:
-            session['logged_in'] = True  
-            session['username'] = username  # Storing username in session
-            app.logger.debug(f"User logged in: {username}")  
-            return redirect(url_for('main_page'))  
+            session['logged_in'] = True
+            session['username'] = username
+            session['email'] = email  # Save the user's email in the session
+            app.logger.debug(f"User logged in: {username}")
+            return redirect(url_for('main_page'))
         else:
-            flash('Email or password is invalid')  
+            flash('Email or password is invalid')
     return render_template('login.html')
+
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        username = request.form.get('username')
+        password = request.form.get('password')  # Plain text password (not secure)
+
+        try:
+            # Attempt to retrieve an existing user with the given email
+            existing_user = dynamodb.Table('login').get_item(
+                Key={'email': email}
+            )
+            
+            if 'Item' in existing_user:
+                # If an entry exists, flash an error message
+                flash('The email already exists', 'error')
+                return render_template('register.html')
+            else:
+                # No existing user, proceed with registration
+                dynamodb.Table('login').put_item(
+                    Item={
+                        'email': email,
+                        'username': username,
+                        'password': password  # Storing the plain text password (insecure)
+                    }
+                )
+                # Inform the user of successful registration
+                flash('Registration successful. Please login.', 'success')
+                return redirect(url_for('login'))
+
+        except ClientError as e:
+            # Handle DynamoDB client errors
+            flash('An error occurred during registration. Please try again.', 'error')
+            return render_template('register.html')
+
+    # Display the registration page if method is GET or no form data was posted
+    return render_template('register.html')
+
 
 
 @app.route('/main_page', methods=['GET', 'POST'])
@@ -96,7 +137,7 @@ def fetch_subscriptions():
         try:
             subscription_response = music_table.scan(
                 FilterExpression=Attr('subscriptions').contains(email)
-            )
+            )3
             subscriptions = subscription_response['Items']
             return jsonify(subscriptions), 200
         except Exception as e:
