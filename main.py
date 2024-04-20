@@ -106,9 +106,11 @@ def fetch_subscriptions():
 
 @app.route('/search', methods=['POST'])
 def search_music():
-    title = request.form.get('title', '')
-    artist = request.form.get('artist', '')
-    year = request.form.get('year', '')
+    data = request.get_json()
+
+    title = data.get('title', '')
+    artist = data.get('artist', '')
+    year = data.get('year', '')
 
     filter_expression = None
     if title:
@@ -175,8 +177,6 @@ def subscribe():
             return jsonify({'error': f"An error occurred while subscribing to music: {e.response['Error']['Message']}"}), 500
     else:
         return jsonify({'error': 'You must be logged in to subscribe.'}), 401
-
-from botocore.exceptions import ClientError
 
 @app.route('/remove_subscription', methods=['POST'])
 def remove_subscription():

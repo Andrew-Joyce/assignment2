@@ -11,7 +11,7 @@
         <h1>Welcome, {{ user_name }}</h1>
 
         <h2>Your Music Subscriptions</h2>
-        <div id="subscription-area" class="subscription-area">
+        <div class="subscription-area" id="subscription-area">
             <!-- Subscription items will be loaded here by JavaScript -->
         </div>
 
@@ -21,11 +21,11 @@
         </div>
 
         <h2>Search for Music</h2>
-        <form action="/search" method="post" class="form-inline">
+        <form id="search-form" class="form-inline">
             <input type="text" name="title" placeholder="Title" class="form-control mb-2 mr-sm-2">
             <input type="text" name="artist" placeholder="Artist" class="form-control mb-2 mr-sm-2">
             <input type="text" name="year" placeholder="Year" class="form-control mb-2 mr-sm-2">
-            <button type="submit" class="btn btn-primary mb-2">Query</button>
+            <button type="submit" class="btn btn-primary mb-2">Search</button>
         </form>
 
         <a href="/logout" class="btn btn-secondary mt-2">Logout</a>
@@ -34,45 +34,58 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
         $(document).ready(function() {
-            fetchSubscriptions();  // Existing function to fetch subscriptions
-        
+            // Existing function to fetch subscriptions
+            fetchSubscriptions();  
+
             // Updated event handler for form submission
-            $('form').submit(function(event) {
+            $('#search-form').submit(function(event) {
                 event.preventDefault();  // Prevent the default form submission via HTTP
 
-                var formData = {
-                    title: $('input[name="title"]').val(),
-                    artist: $('input[name="artist"]').val(),
-                    year: $('input[name="year"]').val()
-                };
+                var formData = {};
+
+                // Dynamically construct the formData object based on user input
+                $('input[type="text"]').each(function() {
+                    var name = $(this).attr('name');
+                    var value = $(this).val();
+                    if (value.trim() !== '') {
+                        formData[name] = value;
+                    }
+                });
 
                 // Post the form data to the search endpoint and handle the response
-                $.post('/search', formData, function(data) {
-                    $('.results-area').empty();  // Clear the previous results
-                    if (data.error) {
-                        alert("Error searching for music: " + data.message);
-                    } else {
-                        if (data.results.length === 0) {
-                            $('.results-area').html('<p>No results found. Please query again.</p>');
+                $.ajax({
+                    url: '/search',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(formData),
+                    success: function(data) {
+                        $('.results-area').empty();  // Clear the previous results
+                        if (data.error) {
+                            alert("Error searching for music: " + data.message);
                         } else {
-                            data.results.forEach(function(item) {
-                                $('.results-area').append(
-                                    `<div class="result-item">
-                                        <img src="${item.img_url || 'path/to/default/image.jpg'}" alt="${item.artist} image" class="artist-img">
-                                        <div class="music-info">
-                                            <h5>${item.title}</h5>
-                                            <p>Artist: ${item.artist}</p>
-                                            <p>Year: ${item.year}</p>
-                                            <button class="subscribe-btn" data-title="${item.title}" data-artist="${item.artist}" data-img_url="${item.img_url || 'path/to/default/image.jpg'}">Subscribe</button>
-                                        </div>
-                                    </div>`
-                                );
-                            });
-                            attachSubscribeHandlers();
+                            if (data.results.length === 0) {
+                                $('.results-area').html('<p>No results found. Please query again.</p>');
+                            } else {
+                                data.results.forEach(function(item) {
+                                    $('.results-area').append(
+                                        `<div class="result-item">
+                                            <img src="${item.img_url || 'path/to/default/image.jpg'}" alt="${item.artist} image" class="artist-img">
+                                            <div class="music-info">
+                                                <h5>${item.title}</h5>
+                                                <p>Artist: ${item.artist}</p>
+                                                <p>Year: ${item.year}</p>
+                                                <button class="subscribe-btn" data-title="${item.title}" data-artist="${item.artist}" data-img_url="${item.img_url || 'path/to/default/image.jpg'}">Subscribe</button>
+                                            </div>
+                                        </div>`
+                                    );
+                                });
+                                attachSubscribeHandlers();
+                            }
                         }
+                    },
+                    error: function(xhr) {
+                        alert("Error searching for music: " + xhr.responseText);
                     }
-                }, 'json').fail(function(xhr) {
-                    alert("Error searching for music: " + xhr.responseText);
                 });
             });
 
@@ -115,7 +128,27 @@
                         data: JSON.stringify(subscriptionData),
                         success: function(data) {
                             if (data.success) {
-                                alert("Successfully subscribed to " + subscriptionData.title);
+                                var subscribed_music = data.subscribed_music;
+                                alert("Successfully subscribed to " + subscribed_music.title);
+
+                                // Remove the subscribed music item from the search results area
+                                var subscriptionItem = $this.closest('.result-item');
+                                subscriptionItem.remove();
+
+                                // Append the subscribed music item to the subscription area
+                                $('#subscription-area').append(
+                                    `<div class="subscription-item">
+                                        <img src="${subscribed_music.img_url}" alt="${subscribed_music.artist} image" class="artist-img">
+                                        <div class="music-info">
+                                            <h5>${subscribed_music.title}</h5>
+                                            <p>Artist: ${subscribed_music.artist}</p>
+                                            <button class="remove-btn" data-title="${subscribed_music.title}" data-artist="${subscribed_music.artist}">Remove</button>
+                                        </div>
+                                    </div>`
+                                );
+
+                                // Attach the remove handler to the newly appended subscription item
+                                attachRemoveHandlers();
                             } else {
                                 alert("Subscription failed: " + data.error);
                             }
@@ -138,15 +171,22 @@
             }
 
             function removeSubscription(title, artist, subscriptionItem) {
-                $.post('/remove_subscription', JSON.stringify({ title: title, artist: artist }), function(data) {
-                    if (data.success) {
-                        alert("Subscription successfully removed.");
-                        subscriptionItem.remove();
-                    } else {
-                        alert("Failed to remove subscription: " + data.error);
+                $.ajax({
+                    url: '/remove_subscription',
+                    type: 'POST',
+                    contentType: 'application/json', // Set content type to JSON
+                    data: JSON.stringify({ title: title, artist: artist }),
+                    success: function(data) {
+                        if (data.success) {
+                            alert("Subscription successfully removed.");
+                            subscriptionItem.remove();
+                        } else {
+                            alert("Failed to remove subscription: " + data.error);
+                        }
+                    },
+                    error: function(response) {
+                        alert("Error removing subscription: " + response.statusText);
                     }
-                }, 'json').fail(function(response) {
-                    alert("Error removing subscription: " + response.statusText);
                 });
             }
         });
